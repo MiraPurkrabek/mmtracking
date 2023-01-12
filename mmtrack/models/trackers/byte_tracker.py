@@ -34,8 +34,8 @@ class ByteTracker(BaseTracker):
     """
 
     def __init__(self,
-                 obj_score_thrs=dict(high=0.6, low=0.1),
-                 init_track_thr=0.7,
+                 obj_score_thrs=dict(high=0.3, low=0.1),
+                 init_track_thr=0.5,
                  weight_iou_with_det_scores=True,
                  match_iou_thrs=dict(high=0.1, low=0.5, tentative=0.3),
                  num_tentatives=3,

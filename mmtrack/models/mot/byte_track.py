@@ -73,8 +73,8 @@ class ByteTrack(BaseMultiObjectTracker):
         num_classes = len(bbox_results)
 
         outs_det = results2outs(bbox_results=bbox_results)
-        det_bboxes = torch.from_numpy(outs_det['bboxes']).to(img)
-        det_labels = torch.from_numpy(outs_det['labels']).to(img).long()
+        det_bboxes = torch.from_numpy(outs_det['bboxes']).to(img.device)
+        det_labels = torch.from_numpy(outs_det['labels']).to(img.device).long()
 
         track_bboxes, track_labels, track_ids = self.tracker.track(
             img=img,
