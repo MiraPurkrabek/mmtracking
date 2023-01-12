@@ -5,14 +5,11 @@ import tempfile
 from argparse import ArgumentParser
 
 import mmcv
-import mmengine
 
 from mmtrack.apis import inference_mot, init_model
-from mmtrack.registry import VISUALIZERS
-from mmtrack.utils import register_all_modules
 
 
-def parse_args():
+def main():
     parser = ArgumentParser()
     parser.add_argument('config', help='config file')
     parser.add_argument('--input', help='input video file or folder')
@@ -30,12 +27,13 @@ def parse_args():
         '--show',
         action='store_true',
         help='whether show the results on the fly')
+    parser.add_argument(
+        '--backend',
+        choices=['cv2', 'plt'],
+        default='cv2',
+        help='the backend to visualize the results')
     parser.add_argument('--fps', help='FPS of the output video')
     args = parser.parse_args()
-    return args
-
-
-def main(args):
     assert args.output or args.show
     # load images
     if osp.isdir(args.input):
@@ -47,9 +45,7 @@ def main(args):
     else:
         imgs = mmcv.VideoReader(args.input)
         IN_VIDEO = True
-
     # define output
-    OUT_VIDEO = False
     if args.output is not None:
         if args.output.endswith('.mp4'):
             OUT_VIDEO = True
@@ -59,6 +55,7 @@ def main(args):
             if len(_out) > 1:
                 os.makedirs(_out[0], exist_ok=True)
         else:
+            OUT_VIDEO = False
             out_path = args.output
             os.makedirs(out_path, exist_ok=True)
 
@@ -70,21 +67,14 @@ def main(args):
             raise ValueError('Please set the FPS for the output video.')
         fps = int(fps)
 
-    register_all_modules(init_default_scope=True)
-
     # build the model from a config file and a checkpoint file
     model = init_model(args.config, args.checkpoint, device=args.device)
 
-    # build the visualizer
-    visualizer = VISUALIZERS.build(model.cfg.visualizer)
-    visualizer.dataset_meta = model.dataset_meta
-
-    prog_bar = mmengine.ProgressBar(len(imgs))
+    prog_bar = mmcv.ProgressBar(len(imgs))
     # test and show/save the images
     for i, img in enumerate(imgs):
         if isinstance(img, str):
-            img_path = osp.join(args.input, img)
-            img = mmcv.imread(img_path)
+            img = osp.join(args.input, img)
         result = inference_mot(model, img, frame_id=i)
         if args.output is not None:
             if IN_VIDEO or OUT_VIDEO:
@@ -93,19 +83,14 @@ def main(args):
                 out_file = osp.join(out_path, img.rsplit(os.sep, 1)[-1])
         else:
             out_file = None
-
-        # show the results
-        visualizer.add_datasample(
-            'mot',
-            img[..., ::-1],
-            data_sample=result,
+        model.show_result(
+            img,
+            result,
+            score_thr=args.score_thr,
             show=args.show,
-            draw_gt=False,
+            wait_time=int(1000. / fps) if fps else 0,
             out_file=out_file,
-            wait_time=float(1 / int(fps)) if fps else 0,
-            pred_score_thr=args.score_thr,
-            step=i)
-
+            backend=args.backend)
         prog_bar.update()
 
     if args.output and OUT_VIDEO:
@@ -115,5 +100,4 @@ def main(args):
 
 
 if __name__ == '__main__':
-    args = parse_args()
-    main(args)
+    main()

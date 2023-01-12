@@ -4,7 +4,7 @@ import glob
 import json
 import os.path as osp
 
-import mmengine
+import mmcv
 
 try:
     import xlrd
@@ -65,26 +65,20 @@ if __name__ == '__main__':
             config_name = osp.splitext(config_name)[0]
             result_path = osp.join(root_path, config_name)
             if osp.exists(result_path):
-
                 # 1 read config and excel
-                cfg = mmengine.Config.fromfile(config)
-                total_epochs = cfg.train_cfg.max_epochs if cfg.train_cfg else 0
+                cfg = mmcv.Config.fromfile(config)
+                total_epochs = cfg.total_epochs
 
                 # the first metric will be used to find the best ckpt
                 has_final_ckpt = True
                 if 'vid' in config:
-                    eval_metrics = ['coco/bbox_mAP_50']
+                    eval_metrics = ['bbox_mAP_50']
                 elif 'mot' in config:
-                    eval_metrics = [
-                        'motchallenge-metric/MOTA', 'motchallenge-metric/IDF1'
-                    ]
+                    eval_metrics = ['MOTA', 'IDF1']
                     # tracktor and deepsort don't have ckpt.
-                    if 'deepsort' in result_path or 'tracktor' in result_path:
-                        has_final_ckpt = False
+                    has_final_ckpt = False
                 elif 'sot' in config:
-                    eval_metrics = [
-                        'sot/success', 'sot/norm_precision', 'sot/precision'
-                    ]
+                    eval_metrics = ['success', 'norm_precision', 'precision']
                 else:
                     raise NotImplementedError(
                         f'Not supported config: {config}')
@@ -108,32 +102,21 @@ if __name__ == '__main__':
                 ckpt_path = f'epoch_{total_epochs}.pth'
                 if osp.exists(osp.join(result_path, ckpt_path)) or \
                         not has_final_ckpt:
-                    if has_final_ckpt:
-                        log_json_path = list(
-                            sorted(
-                                glob.glob(
-                                    osp.join(result_path, '*', 'vis_data',
-                                             'scalars.json'))))[-1]
-                    else:
-                        log_json_path = list(
-                            sorted(
-                                glob.glob(
-                                    osp.join(result_path, '*', '*.json'))))[-1]
+                    log_json_path = list(
+                        sorted(glob.glob(osp.join(result_path,
+                                                  '*.log.json'))))[-1]
 
                     # 3 read metric
                     result_dict = dict()
                     with open(log_json_path, 'r') as f:
                         for line in f.readlines():
                             log_line = json.loads(line)
-                            if 'lr' in log_line.keys():
+                            if 'mode' not in log_line.keys():
                                 continue
-                            if has_final_ckpt:
-                                result_dict[f"epoch_{log_line['step']}"] = {
-                                    key: log_line[key]
-                                    for key in eval_metrics if key in log_line
-                                }
-                            else:
-                                result_dict['test'] = {
+
+                            if log_line['mode'] == 'val' or \
+                                    log_line['mode'] == 'test':
+                                result_dict[f"epoch_{log_line['epoch']}"] = {
                                     key: log_line[key]
                                     for key in eval_metrics if key in log_line
                                 }
@@ -148,7 +131,7 @@ if __name__ == '__main__':
                                 best_epoch_results = result_dict[epoch]
 
                     for metric in best_epoch_results:
-                        if 'sot/success' in best_epoch_results:
+                        if 'success' in best_epoch_results:
                             performance = round(best_epoch_results[metric], 1)
                         else:
                             performance = round(

@@ -1,15 +1,12 @@
 # Copyright (c) OpenMMLab. All rights reserved.
-from typing import Optional, Tuple
-
 import torch
 from mmcv.cnn import ConvModule
+from mmcv.runner import force_fp32
+from mmdet.models.builder import ROI_EXTRACTORS
 from mmdet.models.roi_heads.roi_extractors import SingleRoIExtractor
-from torch import Tensor
-
-from mmtrack.registry import MODELS
 
 
-@MODELS.register_module()
+@ROI_EXTRACTORS.register_module()
 class TemporalRoIAlign(SingleRoIExtractor):
     """Temporal RoI Align module.
 
@@ -28,8 +25,8 @@ class TemporalRoIAlign(SingleRoIExtractor):
     """
 
     def __init__(self,
-                 num_most_similar_points: int = 2,
-                 num_temporal_attention_blocks: int = 4,
+                 num_most_similar_points=2,
+                 num_temporal_attention_blocks=4,
                  *args,
                  **kwargs):
         super(TemporalRoIAlign, self).__init__(*args, **kwargs)
@@ -45,8 +42,7 @@ class TemporalRoIAlign(SingleRoIExtractor):
                 norm_cfg=None,
                 act_cfg=None)
 
-    def temporal_attentional_feature_aggregation(self, x: Tensor,
-                                                 ref_x: Tensor) -> Tensor:
+    def temporal_attentional_feature_aggregation(self, x, ref_x):
         """Aggregate the RoI features `x` with the Most Similar RoI features
         `ref_x`.
 
@@ -101,8 +97,7 @@ class TemporalRoIAlign(SingleRoIExtractor):
         x = (x * ada_weights).sum(dim=0)
         return x
 
-    def most_similar_roi_align(self, roi_feats: Tensor,
-                               ref_feats: Tensor) -> Tensor:
+    def most_similar_roi_align(self, roi_feats, ref_feats):
         """Extract the Most Similar RoI features from reference feature maps
         `ref_feats` based on RoI features `roi_feats`.
 
@@ -186,24 +181,9 @@ class TemporalRoIAlign(SingleRoIExtractor):
         ref_roi_feats = ref_roi_feats.permute(0, 1, 4, 2, 3)
         return ref_roi_feats
 
-    def forward(self,
-                feats: Tuple[Tensor],
-                rois: Tensor,
-                roi_scale_factor: Optional[float] = None,
-                ref_feats: Optional[Tuple[Tensor]] = None,
-                **kwargs) -> Tensor:
-        """Forward function.
-        Args:
-            feats (Tuple[Tensor]): The feature maps.
-            rois (Tensor): The RoIs.
-            roi_scale_factor (Optional[float], optional): Scale factor that RoI
-                will be multiplied by. Defaults to None.
-            ref_feats (Tuple[Tensor], optional): The feature maps of ref_img.
-                Defaults to None.
-
-        Returns:
-            Tensor: RoI features.
-        """
+    @force_fp32(apply_to=('feats', 'ref_feats'), out_fp16=True)
+    def forward(self, feats, rois, roi_scale_factor=None, ref_feats=None):
+        """Forward function."""
         roi_feats = super().forward(feats, rois, roi_scale_factor)
 
         if ref_feats is None:

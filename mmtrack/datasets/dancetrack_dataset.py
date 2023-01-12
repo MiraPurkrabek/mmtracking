@@ -1,5 +1,6 @@
 # Copyright (c) OpenMMLab. All rights reserved.
-from mmtrack.registry import DATASETS
+from mmdet.datasets import DATASETS
+
 from .mot_challenge_dataset import MOTChallengeDataset
 
 
@@ -7,8 +8,19 @@ from .mot_challenge_dataset import MOTChallengeDataset
 class DanceTrackDataset(MOTChallengeDataset):
     """Dataset for DanceTrack: https://github.com/DanceTrack/DanceTrack.
 
-    All content is inherited from MOTChallengeDataset.
+    Most content is inherited from MOTChallengeDataset.
     """
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def get_benchmark_and_eval_split(self):
+        """Get benchmark and dataset split to evaluate.
+
+        Get benchmark from upeper/lower-case image prefix and the dataset
+        split to evaluate.
+
+        Returns:
+            tuple(string): The first string denotes the type of dataset.
+            The second string denots the split of the dataset to eval.
+        """
+        # As DanceTrack only has train/val and use 'val' for evaluation as
+        # default, we can directly output the desired split.
+        return 'DanceTrack', 'val'

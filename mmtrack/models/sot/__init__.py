@@ -1,6 +1,6 @@
 # Copyright (c) OpenMMLab. All rights reserved.
-from .prdimp import PrDiMP
+from .mixformer import MixFormer
 from .siamrpn import SiamRPN
 from .stark import Stark
 
-__all__ = ['SiamRPN', 'Stark', 'PrDiMP']
+__all__ = ['SiamRPN', 'Stark', 'MixFormer']

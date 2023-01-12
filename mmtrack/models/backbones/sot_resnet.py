@@ -1,29 +1,26 @@
 # Copyright (c) OpenMMLab. All rights reserved.
-from typing import Optional
-
 import torch.nn as nn
 from mmcv.cnn import build_conv_layer, build_norm_layer
 from mmdet.models.backbones.resnet import Bottleneck, ResNet
-
-from mmtrack.registry import MODELS
+from mmdet.models.builder import BACKBONES
 
 
 class SOTBottleneck(Bottleneck):
     expansion = 4
 
     def __init__(self,
-                 inplanes: int,
-                 planes: int,
-                 stride: int = 1,
-                 dilation: int = 1,
-                 downsample: Optional[nn.Module] = None,
-                 style: str = 'pytorch',
-                 with_cp: bool = False,
-                 conv_cfg: Optional[dict] = None,
-                 norm_cfg: dict = dict(type='BN'),
-                 dcn: Optional[dict] = None,
-                 plugins: Optional[dict] = None,
-                 init_cfg: Optional[dict] = None):
+                 inplanes,
+                 planes,
+                 stride=1,
+                 dilation=1,
+                 downsample=None,
+                 style='pytorch',
+                 with_cp=False,
+                 conv_cfg=None,
+                 norm_cfg=dict(type='BN'),
+                 dcn=None,
+                 plugins=None,
+                 init_cfg=None):
         """Bottleneck block for ResNet.
 
         If style is "pytorch", the stride-two layer is the 3x3 conv layer, if
@@ -150,7 +147,7 @@ class SOTBottleneck(Bottleneck):
                 planes * self.expansion, self.after_conv3_plugins)
 
 
-@MODELS.register_module()
+@BACKBONES.register_module()
 class SOTResNet(ResNet):
     """ResNet backbone for SOT.
 
@@ -160,14 +157,11 @@ class SOTResNet(ResNet):
 
     Args:
         depth (int): Depth of resnet, from {50, }.
-        unfreeze_backbone (bool): Whether to unfreeze the parameters of
-            backbone. Defaults to True. It's used for building all the
-            parameters into buckets in the instililzation of DDP.
     """
 
     arch_settings = {50: (SOTBottleneck, (3, 4, 6, 3))}
 
-    def __init__(self, depth: int, unfreeze_backbone: bool = True, **kwargs):
+    def __init__(self, depth, unfreeze_backbone=True, **kwargs):
         assert depth == 50, 'Only support r50 backbone for sot.'
         super(SOTResNet, self).__init__(depth, **kwargs)
         # unfreeze the backbone parameters so that DDP can build all parameters
@@ -198,7 +192,7 @@ class SOTResNet(ResNet):
         """Pack all blocks in a stage into a ``ResLayer``."""
         return SOTResLayer(**kwargs)
 
-    def _make_stem_layer(self, in_channels: int, stem_channels: int):
+    def _make_stem_layer(self, in_channels, stem_channels):
         if self.deep_stem:
             self.stem = nn.Sequential(
                 build_conv_layer(
@@ -256,7 +250,6 @@ class SOTResLayer(nn.Sequential):
         planes (int): Planes of block.
         num_blocks (int): Number of blocks.
         stride (int): Stride of the first block. Default: 1
-        dilation (int): The factor of dilation.
         avg_down (bool): Use AvgPool instead of stride conv when
             downsampling in the bottleneck. Default: False
         conv_cfg (dict): Dictionary to construct and config conv layer.
@@ -268,16 +261,16 @@ class SOTResLayer(nn.Sequential):
     """
 
     def __init__(self,
-                 block: nn.Module,
-                 inplanes: int,
-                 planes: int,
-                 num_blocks: int,
-                 stride: int = 1,
-                 dilation: int = 1,
-                 avg_down: bool = False,
-                 conv_cfg: Optional[dict] = None,
-                 norm_cfg: dict = dict(type='BN'),
-                 downsample_first: bool = True,
+                 block,
+                 inplanes,
+                 planes,
+                 num_blocks,
+                 stride=1,
+                 dilation=1,
+                 avg_down=False,
+                 conv_cfg=None,
+                 norm_cfg=dict(type='BN'),
+                 downsample_first=True,
                  **kwargs):
         self.block = block
 

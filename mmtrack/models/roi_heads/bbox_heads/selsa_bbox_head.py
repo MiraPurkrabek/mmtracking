@@ -1,15 +1,11 @@
 # Copyright (c) OpenMMLab. All rights reserved.
-from typing import Tuple
-
 import torch.nn as nn
-from mmdet.models import ConvFCBBoxHead
-from torch import Tensor
+from mmdet.models import HEADS, ConvFCBBoxHead
 
-from mmtrack.registry import MODELS
-from mmtrack.utils import ConfigType
+from mmtrack.models import build_aggregator
 
 
-@MODELS.register_module()
+@HEADS.register_module()
 class SelsaBBoxHead(ConvFCBBoxHead):
     """Selsa bbox head.
 
@@ -17,17 +13,17 @@ class SelsaBBoxHead(ConvFCBBoxHead):
     Object Detection". `SELSA <https://arxiv.org/abs/1907.06390>`_.
 
     Args:
-        aggregator (ConfigType): Configuration of aggregator.
+        aggregator (dict): Configuration of aggregator.
     """
 
-    def __init__(self, aggregator: ConfigType, *args, **kwargs):
+    def __init__(self, aggregator, *args, **kwargs):
         super(SelsaBBoxHead, self).__init__(*args, **kwargs)
         self.aggregator = nn.ModuleList()
         for i in range(self.num_shared_fcs):
-            self.aggregator.append(MODELS.build(aggregator))
+            self.aggregator.append(build_aggregator(aggregator))
         self.inplace_false_relu = nn.ReLU(inplace=False)
 
-    def forward(self, x: Tensor, ref_x: Tensor) -> Tuple:
+    def forward(self, x, ref_x):
         """Computing the `cls_score` and `bbox_pred` of the features `x` of key
         frame proposals.
 
@@ -38,14 +34,8 @@ class SelsaBBoxHead(ConvFCBBoxHead):
                 frame proposals.
 
         Returns:
-            tuple: A tuple of classification scores and bbox prediction.
-
-                - cls_score (Tensor): Classification scores for all
-                  scale levels, each is a 4D-tensor, the channels number
-                  is num_base_priors * num_classes.
-                - bbox_pred (Tensor): Box energies / deltas for all
-                  scale levels, each is a 4D-tensor, the channels number
-                  is num_base_priors * 4.
+            tuple(cls_score, bbox_pred): The predicted score of classes and
+            the predicted regression offsets.
         """
         # shared part
         if self.num_shared_convs > 0:

@@ -1,28 +1,30 @@
 # Copyright (c) OpenMMLab. All rights reserved.
 from abc import ABCMeta, abstractmethod
-from typing import List, Optional, Tuple
 
 import torch
 import torch.nn.functional as F
 from addict import Dict
+from mmcv.runner import BaseModule
+
+from mmtrack.models import TRACKERS
 
 
-class BaseTracker(metaclass=ABCMeta):
+@TRACKERS.register_module()
+class BaseTracker(BaseModule, metaclass=ABCMeta):
     """Base tracker model.
 
     Args:
         momentums (dict[str:float], optional): Momentums to update the buffers.
             The `str` indicates the name of the buffer while the `float`
-            indicates the momentum. Defaults to None.
+            indicates the momentum. Default to None.
         num_frames_retain (int, optional). If a track is disappeared more than
             `num_frames_retain` frames, it will be deleted in the memo.
-             Defaults to 10.
+        init_cfg (dict or list[dict], optional): Initialization config dict.
+            Defaults to None.
     """
 
-    def __init__(self,
-                 momentums: Optional[dict] = None,
-                 num_frames_retain: int = 10) -> None:
-        super().__init__()
+    def __init__(self, momentums=None, num_frames_retain=10, init_cfg=None):
+        super().__init__(init_cfg)
         if momentums is not None:
             assert isinstance(momentums, dict), 'momentums must be a dict'
         self.momentums = momentums
@@ -31,27 +33,27 @@ class BaseTracker(metaclass=ABCMeta):
 
         self.reset()
 
-    def reset(self) -> None:
+    def reset(self):
         """Reset the buffer of the tracker."""
         self.num_tracks = 0
         self.tracks = dict()
 
     @property
-    def empty(self) -> bool:
+    def empty(self):
         """Whether the buffer is empty or not."""
         return False if self.tracks else True
 
     @property
-    def ids(self) -> List[dict]:
+    def ids(self):
         """All ids in the tracker."""
         return list(self.tracks.keys())
 
     @property
-    def with_reid(self) -> bool:
+    def with_reid(self):
         """bool: whether the framework has a reid model"""
         return hasattr(self, 'reid') and self.reid is not None
 
-    def update(self, **kwargs) -> None:
+    def update(self, **kwargs):
         """Update the tracker.
 
         Args:
@@ -90,7 +92,7 @@ class BaseTracker(metaclass=ABCMeta):
 
         self.pop_invalid_tracks(frame_id)
 
-    def pop_invalid_tracks(self, frame_id: int) -> None:
+    def pop_invalid_tracks(self, frame_id):
         """Pop out invalid tracks."""
         invalid_ids = []
         for k, v in self.tracks.items():
@@ -99,7 +101,7 @@ class BaseTracker(metaclass=ABCMeta):
         for invalid_id in invalid_ids:
             self.tracks.pop(invalid_id)
 
-    def update_track(self, id: int, obj: Tuple[torch.Tensor]):
+    def update_track(self, id, obj):
         """Update a track."""
         for k, v in zip(self.memo_items, obj):
             v = v[None]
@@ -109,7 +111,7 @@ class BaseTracker(metaclass=ABCMeta):
             else:
                 self.tracks[id][k].append(v)
 
-    def init_track(self, id: int, obj: Tuple[torch.Tensor]):
+    def init_track(self, id, obj):
         """Initialize a track."""
         self.tracks[id] = Dict()
         for k, v in zip(self.memo_items, obj):
@@ -120,7 +122,7 @@ class BaseTracker(metaclass=ABCMeta):
                 self.tracks[id][k] = [v]
 
     @property
-    def memo(self) -> dict:
+    def memo(self):
         """Return all buffers in the tracker."""
         outs = Dict()
         for k in self.memo_items:
@@ -140,16 +142,12 @@ class BaseTracker(metaclass=ABCMeta):
             outs[k] = torch.cat(v, dim=0)
         return outs
 
-    def get(self,
-            item: str,
-            ids: Optional[list] = None,
-            num_samples: Optional[int] = None,
-            behavior: Optional[str] = None) -> torch.Tensor:
+    def get(self, item, ids=None, num_samples=None, behavior=None):
         """Get the buffer of a specific item.
 
         Args:
             item (str): The demanded item.
-            ids (list[int], optional): The demanded ids. Defaults to None.
+            ids (list[int]): The demanded ids.
             num_samples (int, optional): Number of samples to calculate the
                 results. Defaults to None.
             behavior (str, optional): Behavior to calculate the results.
@@ -184,18 +182,14 @@ class BaseTracker(metaclass=ABCMeta):
         """Tracking forward function."""
         pass
 
-    def crop_imgs(self,
-                  img: torch.Tensor,
-                  meta_info: dict,
-                  bboxes: torch.Tensor,
-                  rescale: bool = False) -> torch.Tensor:
+    def crop_imgs(self, img, img_metas, bboxes, rescale=False):
         """Crop the images according to some bounding boxes. Typically for re-
         identification sub-module.
 
         Args:
-            img (Tensor): of shape (T, C, H, W) encoding input image.
+            img (Tensor): of shape (N, C, H, W) encoding input images.
                 Typically these should be mean centered and std scaled.
-            meta_info (dict): image information dict where each dict
+            img_metas (list[dict]): list of image info dict where each dict
                 has: 'img_shape', 'scale_factor', 'flip', and may also contain
                 'filename', 'ori_shape', 'pad_shape', and 'img_norm_cfg'.
             bboxes (Tensor): of shape (N, 4) or (N, 5).
@@ -203,25 +197,22 @@ class BaseTracker(metaclass=ABCMeta):
                 rescaled to fit the scale of the image. Defaults to False.
 
         Returns:
-            Tensor: Image tensor of shape (T, C, H, W).
+            Tensor: Image tensor of shape (N, C, H, W).
         """
-        h, w = meta_info['img_shape']
+        h, w, _ = img_metas[0]['img_shape']
         img = img[:, :, :h, :w]
         if rescale:
-            factor_x, factor_y = meta_info['scale_factor']
-            bboxes[:, :4] *= torch.tensor(
-                [factor_x, factor_y, factor_x, factor_y]).to(bboxes.device)
-        bboxes[:, 0] = torch.clamp(bboxes[:, 0], min=0, max=w - 1)
-        bboxes[:, 1] = torch.clamp(bboxes[:, 1], min=0, max=h - 1)
-        bboxes[:, 2] = torch.clamp(bboxes[:, 2], min=1, max=w)
-        bboxes[:, 3] = torch.clamp(bboxes[:, 3], min=1, max=h)
+            bboxes[:, :4] *= torch.tensor(img_metas[0]['scale_factor']).to(
+                bboxes.device)
+        bboxes[:, 0::2] = torch.clamp(bboxes[:, 0::2], min=0, max=w)
+        bboxes[:, 1::2] = torch.clamp(bboxes[:, 1::2], min=0, max=h)
 
         crop_imgs = []
         for bbox in bboxes:
             x1, y1, x2, y2 = map(int, bbox)
-            if x2 <= x1:
+            if x2 == x1:
                 x2 = x1 + 1
-            if y2 <= y1:
+            if y2 == y1:
                 y2 = y1 + 1
             crop_img = img[:, :, y1:y2, x1:x2]
             if self.reid.get('img_scale', False):
@@ -234,8 +225,5 @@ class BaseTracker(metaclass=ABCMeta):
 
         if len(crop_imgs) > 0:
             return torch.cat(crop_imgs, dim=0)
-        elif self.reid.get('img_scale', False):
-            _h, _w = self.reid['img_scale']
-            return img.new_zeros((0, 3, _h, _w))
         else:
-            return img.new_zeros((0, 3, h, w))
+            return img.new_zeros((0, ))

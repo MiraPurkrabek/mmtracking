@@ -1,30 +1,27 @@
 # Copyright (c) OpenMMLab. All rights reserved.
 import random
-from typing import List, Optional
 
-from mmengine.dataset import ConcatDataset
-
-from mmtrack.registry import DATASETS
+from mmdet.datasets.builder import DATASETS, build_dataset
+from torch.utils.data.dataset import ConcatDataset
 
 
 @DATASETS.register_module()
 class RandomSampleConcatDataset(ConcatDataset):
     """A wrapper of concatenated dataset. Support randomly sampling one dataset
     from concatenated datasets and then getting samples from the sampled
-    dataset. This class only support training.
+    dataset.
 
     Args:
-        datasets (list[dict]): The list contains all configs of
+        dataset_cfgs (list[dict]): The list contains all configs of
             concatenated datasets.
-        dataset_sampling_weights (Optional[List[float]], optional): The list
-            contains the sampling weights of each dataset. Defaults to None.
+        dataset_sampling_weights (list[float]): The list contains the sampling
+            weights of each dataset.
     """
 
-    def __init__(self,
-                 datasets: List[dict],
-                 dataset_sampling_weights: Optional[List[float]] = None):
+    def __init__(self, dataset_cfgs, dataset_sampling_weights=None):
         if dataset_sampling_weights is None:
-            self.dataset_sampling_probs = [1. / len(datasets)] * len(datasets)
+            self.dataset_sampling_probs = [1. / len(dataset_cfgs)
+                                           ] * len(dataset_cfgs)
         else:
             for x in dataset_sampling_weights:
                 assert x >= 0.
@@ -34,21 +31,16 @@ class RandomSampleConcatDataset(ConcatDataset):
                 x / prob_total for x in dataset_sampling_weights
             ]
 
-        datasets = [DATASETS.build(cfg) for cfg in datasets]
+        datasets = [build_dataset(cfg) for cfg in dataset_cfgs]
         # add an attribute `CLASSES` for the calling in `tools/train.py`
-        self.CLASSES = datasets[0].META['CLASSES']
+        self.CLASSES = datasets[0].CLASSES
 
         super().__init__(datasets)
 
-    def __getitem__(self, ind: int) -> dict:
-        """Random sampling a dataset and get samples from this dataset..
+    def __getitem__(self, ind):
+        """Random sampling a dataset and get samples from this dataset.
 
-        Args:
-            ind (int): The random index.  Actually, in this class,
-                the input 'ind' is not used in 'dataset'.
-
-        Returns:
-            dict: The results after the dataset pipeline.
+        Actually, the input 'ind' is not used in 'dataset'.
         """
         while True:
             dataset = random.choices(self.datasets,

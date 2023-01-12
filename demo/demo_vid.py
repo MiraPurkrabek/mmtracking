@@ -5,14 +5,11 @@ import tempfile
 from argparse import ArgumentParser
 
 import mmcv
-import mmengine
 
 from mmtrack.apis import inference_vid, init_model
-from mmtrack.registry import VISUALIZERS
-from mmtrack.utils import register_all_modules
 
 
-def parse_args():
+def main():
     parser = ArgumentParser()
     parser.add_argument('config', help='Config file')
     parser.add_argument('--input', help='input video file')
@@ -26,17 +23,16 @@ def parse_args():
         default=False,
         help='whether to show visualizations.')
     parser.add_argument(
-        '--score_thr', type=float, default=0.8, help='bbox score threshold')
+        '--score-thr', type=float, default=0.8, help='bbox score threshold')
+    parser.add_argument(
+        '--thickness', default=3, type=int, help='Thickness of bbox lines.')
     parser.add_argument('--fps', help='FPS of the output video')
     args = parser.parse_args()
-    return args
 
-
-def main(args):
     # load images
     if osp.isdir(args.input):
         imgs = sorted(
-            filter(lambda x: x.endswith(('.jpg', '.png', '.jpeg', '.JPEG')),
+            filter(lambda x: x.endswith(('.jpg', '.png', '.jpeg')),
                    os.listdir(args.input)),
             key=lambda x: int(x.split('.')[0]))
         IN_VIDEO = False
@@ -45,7 +41,6 @@ def main(args):
         IN_VIDEO = True
 
     # define output
-    OUT_VIDEO = False
     if args.output is not None:
         if args.output.endswith('.mp4'):
             OUT_VIDEO = True
@@ -55,6 +50,7 @@ def main(args):
             if len(_out) > 1:
                 os.makedirs(_out[0], exist_ok=True)
         else:
+            OUT_VIDEO = False
             out_path = args.output
             os.makedirs(out_path, exist_ok=True)
     fps = args.fps
@@ -65,21 +61,15 @@ def main(args):
             raise ValueError('Please set the FPS for the output video.')
         fps = int(fps)
 
-    register_all_modules(init_default_scope=True)
-
     # build the model from a config file and a checkpoint file
     model = init_model(args.config, args.checkpoint, device=args.device)
 
-    # build the visualizer
-    visualizer = VISUALIZERS.build(model.cfg.visualizer)
-    visualizer.dataset_meta = model.dataset_meta
-
-    prog_bar = mmengine.ProgressBar(len(imgs))
+    prog_bar = mmcv.ProgressBar(len(imgs))
     # test and show/save the images
     for i, img in enumerate(imgs):
         if isinstance(img, str):
-            img_path = osp.join(args.input, img)
-            img = mmcv.imread(img_path)
+            img = osp.join(args.input, img)
+            img = mmcv.imread(img)
 
         result = inference_vid(model, img, frame_id=i)
         if args.output is not None:
@@ -89,19 +79,14 @@ def main(args):
                 out_file = osp.join(out_path, img.rsplit(os.sep, 1)[-1])
         else:
             out_file = None
-
-        # show the results
-        visualizer.add_datasample(
-            'vid',
-            img[..., ::-1],
-            data_sample=result,
+        model.show_result(
+            img,
+            result,
+            score_thr=args.score_thr,
             show=args.show,
-            draw_gt=False,
+            wait_time=int(1000. / fps) if fps else 0,
             out_file=out_file,
-            wait_time=float(1 / int(fps)) if fps else 0,
-            pred_score_thr=args.score_thr,
-            step=i)
-
+            thickness=args.thickness)
         prog_bar.update()
 
     if args.output and OUT_VIDEO:
@@ -112,5 +97,4 @@ def main(args):
 
 
 if __name__ == '__main__':
-    args = parse_args()
-    main(args)
+    main()
