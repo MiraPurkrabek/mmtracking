@@ -42,7 +42,7 @@ class ByteTrack(BaseMultiObjectTracker):
         """Forward function during training."""
         return self.detector.forward_train(*args, **kwargs)
 
-    def simple_test(self, img, img_metas, rescale=False, **kwargs):
+    def simple_test(self, img, img_metas, det_results=None, rescale=False, **kwargs):
         """Test without augmentations.
 
         Args:
@@ -51,6 +51,8 @@ class ByteTrack(BaseMultiObjectTracker):
             img_metas (list[dict]): list of image info dict where each dict
                 has: 'img_shape', 'scale_factor', 'flip', and may also contain
                 'filename', 'ori_shape', 'pad_shape', and 'img_norm_cfg'.
+            det_results (list, optional): If None, then will use default detector
+                from the MMdet. Defaults to None.
             rescale (bool, optional): If False, then returned bboxes and masks
                 will fit the scale of img, otherwise, returned bboxes and masks
                 will fit the scale of original image shape. Defaults to False.
@@ -61,9 +63,11 @@ class ByteTrack(BaseMultiObjectTracker):
         frame_id = img_metas[0].get('frame_id', -1)
         if frame_id == 0:
             self.tracker.reset()
+        
+        if det_results is None:
+            det_results = self.detector.simple_test(
+                img, img_metas, rescale=rescale)
 
-        det_results = self.detector.simple_test(
-            img, img_metas, rescale=rescale)
         assert len(det_results) == 1, 'Batch inference is not supported.'
         bbox_results = det_results[0]
         num_classes = len(bbox_results)
